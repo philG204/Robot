@@ -1,1 +1,171 @@
+from tkinter import *
+from PIL import Image, ImageTk
+import socket
+import time
+import multiprocessing
+from threading import Thread
+import struct
+import queue
+import io
 
+
+class InputWindow():
+
+    def __init__(self):
+        self.root = Tk()
+        self.root.configure(background="black")
+        self.root.resizable(width=False, height=False)
+        self.queue = queue.Queue()
+        self.running = 1
+        self.img = PhotoImage(file="startBild.png")
+        self.root.title("RobotControlProgram")
+        self.root.geometry("200x200")
+        self.panel1 = Label(self.root, image=self.img)
+        self.panel1.pack(side=TOP)
+        self.b = Button(self.root, text="Connect", command=self.connect, fg="green", bg="black")
+        self.b.pack(side=BOTTOM)
+        self.periodiccall()
+        self.root.mainloop()
+        global b, l
+
+    def start(self):
+        self.root = Tk()
+        self.root.configure(background="black")
+        self.root.resizable(width=False, height=False)
+        self.queue = queue.Queue()
+        self.running = 1
+        self.img = PhotoImage(file="startBild.png")
+        self.root.title("RobotControlProgram")
+        self.root.geometry("200x200")
+        self.panel1 = Label(self.root, image=self.img)
+        self.panel1.pack(side=TOP)
+        self.b = Button(self.root, text="Connect", command=self.connect, fg="green", bg="black")
+        self.b.pack(side=BOTTOM)
+        self.periodiccall()
+        self.root.mainloop()
+        global b, l
+        print(type(b, l))
+
+    def connect(self):
+
+        global client_socket
+        serverSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        serverSocket.bind(("192.168.1.105", 1025))
+        serverSocket.listen(1)
+        try:
+            (client_socket, addr) = serverSocket.accept()
+            print("connect")
+            self.inputLayer()
+        except socket.error as e:
+            print(e)
+
+    def inputLayer(self):
+        self.b.destroy()
+        self.root.geometry("200x300")
+        self.controlPanel = Frame(self.root, width=10000, height=1000, bg="red")
+        self.controlPanel.pack(side=BOTTOM)
+        self.fb = Button(self.controlPanel, text="Forward", command=self.send2, fg="green", bg="black")
+        self.fb.pack(side=TOP)
+        self.bb = Button(self.controlPanel, text="   Backward", command=self.send1, fg="green", bg="black")
+        self.bb.pack(side=BOTTOM)
+        self.lb = Button(self.controlPanel, text="Left", command=self.send3, fg="green", bg="black")
+        self.lb.pack(side=LEFT)
+        self.rb = Button(self.controlPanel, text="Right", command=self.send4, fg="green", bg="black")
+        self.rb.pack(side=RIGHT)
+        self.sb = Button(self.controlPanel, text="   Stop   ", command=self.send5, fg="green", bg="black")
+        self.sb.pack(anchor=CENTER)
+        self.lsb = Button(self.controlPanel, text="Livestream", command=self.sendLivestream, fg="green", bg="black")
+        self.lsb.pack(anchor=NW)
+        self.cc = Button(self.controlPanel, text="disconnecting", command=self.closeConnect, fg="green", bg="black")
+        self.cc.pack(side=BOTTOM)
+
+    def sendLivestream(self):
+        self.lsb.destroy()
+        client_socket.sendall(bytes("ls", "utf-8"))
+        print(client_socket.recv(1024))
+        j = Thread(target=self.workerThread1)
+        j.start()
+
+    def send5(self):
+        client_socket.sendall(bytes("stop", "utf-8"))
+        print(client_socket.recv(1024))
+
+    def send4(self):
+        client_socket.sendall(bytes("d", "utf-8"))
+        print(client_socket.recv(1024))
+
+    def send3(self):
+        client_socket.sendall(bytes("a", "utf-8"))
+        print(client_socket.recv(1024))
+
+    def send2(self):
+        client_socket.sendall(bytes("w", "utf-8"))
+        print(client_socket.recv(1024))
+
+    def send1(self):
+        client_socket.sendall(bytes("s", "utf-8"))
+        print(client_socket.recv(1035))
+
+    def workerThread1(self):
+        # set up server
+        # Start a socket listening for connections on 0.0.0.0:8000 (0.0.0.0 means
+        # all interfaces)
+        self.root.geometry("640x590")
+        self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_socket.bind(('192.168.1.105', 5000))
+        self.server_socket.listen(0)
+
+        # Accept a single connection and make a file-like object out of it
+        self.connection = self.server_socket.accept()[0].makefile('rb')
+
+        try:
+            while self.running:
+                # Read the length of the image as a 32-bit unsigned int. If the
+                # length is zero, quit the loop
+                image_len = struct.unpack('<L', self.connection.read(struct.calcsize('<L')))[0]
+                print(image_len)
+                # Construct a stream to hold the image data and read the image
+                # data from the connection
+                image_stream = io.BytesIO()
+                image_stream.write(self.connection.read(image_len))
+
+                image_stream.seek(0)
+
+                newphotoimage = ImageTk.PhotoImage(Image.open(image_stream))
+                self.queue.put(newphotoimage)
+
+        except socket.error as e:
+            print(e)
+
+    def periodiccall(self):
+        """
+        Check every 200 ms if there is something new in the queue.
+        """
+        self.processincoming()
+        if not self.running:
+            # This is the brutal stop of the system. You may want to do
+            # some cleanup before actually shutting it down.
+            import sys
+            sys.exit(1)
+        self.root.after(200, self.periodiccall)
+
+    def processincoming(self):
+        """Handle all messages currently in the queue, if any."""
+        while self.queue.qsize():
+            try:
+                self.update_image(self.queue.get(0))
+            except queue.Empty:
+                # just on general principles, although we don't
+                # expect this branch to be taken in this case
+                print("There is nothing in the queue")
+                pass
+
+    def update_image(self, newimage):
+        self.image1 = newimage
+        self.panel1.configure(image=self.image1)
+
+    def closeConnect(self):
+        client_socket.sendall(bytes("stop", "utf-8"))
+        print(client_socket.recv(1024))
+
+iW = InputWindow()
