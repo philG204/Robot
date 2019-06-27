@@ -6,7 +6,7 @@ block_cipher = None
 a = Analysis(['C:\\Users\\Philipp\\Desktop\\script\\newRobotServer.py'],
              pathex=['C:\\Users\\Philipp\\Desktop\\script'],
              binaries=[],
-             datas=["startBild.png"],
+             datas=[("/script/img/startBild.png", "img")],
              hiddenimports=[],
              hookspath=[],
              runtime_hooks=[],
@@ -29,4 +29,5 @@ exe = EXE(pyz,
           strip=False,
           upx=True,
           runtime_tmpdir=None,
-          console=True )
+          console=False , icon='C:\\Users\\Philipp\\Desktop\\script\\server.ico')
+
